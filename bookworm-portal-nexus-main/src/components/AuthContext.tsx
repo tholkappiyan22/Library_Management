@@ -1,15 +1,29 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { auth, db } from '../firebase'; // Corrected: Using relative path
+import { 
+    createUserWithEmailAndPassword, 
+    signInWithEmailAndPassword, 
+    signOut, 
+    onAuthStateChanged,
+    sendPasswordResetEmail as firebaseSendPasswordResetEmail,
+    updateProfile,
+    User as FirebaseUser
+} from "firebase/auth";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 
-interface User {
-  id: string;
+// The User interface for our application.
+// The `role` property is now an array to support multiple roles.
+export interface AppUser {
+  uid: string;
   name: string;
   email: string;
-  role: 'student' | 'faculty' | 'librarian' | 'admin';
+  role: ('student' | 'faculty' | 'librarian' | 'admin')[];
   studentId?: string;
   department?: string;
   phone?: string;
 }
 
+// Data needed during the registration process.
 interface RegisterData {
   name: string;
   email: string;
@@ -20,158 +34,108 @@ interface RegisterData {
   phone?: string;
 }
 
+// The shape of our authentication context.
 interface AuthContextType {
-  user: User | null;
+  user: AppUser | null;
+  firebaseUser: FirebaseUser | null;
   login: (email: string, password: string) => Promise<boolean>;
   register: (data: RegisterData) => Promise<boolean>;
   logout: () => void;
   sendPasswordResetEmail: (email: string) => Promise<void>;
-  resetPassword: (token: string, newPassword: string) => Promise<boolean>;
   isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const mockUsers: User[] = [
-  {
-    id: '1',
-    name: 'John Smith',
-    email: 'student@college.edu',
-    role: 'student',
-    studentId: 'STU001',
-    department: 'Computer Science',
-    phone: '+1234567890'
-  },
-  {
-    id: '2',
-    name: 'Dr. Sarah Johnson',
-    email: 'faculty@college.edu',
-    role: 'faculty',
-    department: 'Mathematics',
-    phone: '+1234567891'
-  },
-  {
-    id: '3',
-    name: 'Alice Brown',
-    email: 'librarian@college.edu',
-    role: 'librarian',
-    department: 'Library Services',
-    phone: '+1234567892'
-  },
-  {
-    id: '4',
-    name: 'Robert Wilson',
-    email: 'admin@college.edu',
-    role: 'admin',
-    department: 'Administration',
-    phone: '+1234567893'
-  }
-];
-
-interface StoredCredentials {
-  [email: string]: string; // email -> password mapping
-}
-
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [registeredUsers, setRegisteredUsers] = useState<User[]>([]);
 
   useEffect(() => {
-    // Check for stored user on app start
-    const storedUser = localStorage.getItem('library-user');
-    const storedRegisteredUsers = localStorage.getItem('library-registered-users');
-    
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    
-    if (storedRegisteredUsers) {
-      setRegisteredUsers(JSON.parse(storedRegisteredUsers));
-    }
-    
-    setIsLoading(false);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+        setIsLoading(true);
+        if (currentUser) {
+            setFirebaseUser(currentUser);
+            const userDocRef = doc(db, "users", currentUser.uid);
+            const userDoc = await getDoc(userDocRef);
+            if (userDoc.exists()) {
+                setUser(userDoc.data() as AppUser);
+            }
+        } else {
+            setFirebaseUser(null);
+            setUser(null);
+        }
+        setIsLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const storedRegisteredUsers = localStorage.getItem('library-registered-users');
-    const currentRegisteredUsers = storedRegisteredUsers ? JSON.parse(storedRegisteredUsers) : [];
-    const storedCredentials = localStorage.getItem('library-user-credentials');
-    const credentials: StoredCredentials = storedCredentials ? JSON.parse(storedCredentials) : {};
-    
-    const allUsers = [...mockUsers, ...currentRegisteredUsers];
-    const foundUser = allUsers.find(u => u.email === email);
-    
-    if (foundUser) {
-      if ((mockUsers.some(u => u.email === email) && password === 'password123') || (credentials[email] === password)) {
-        setUser(foundUser);
-        localStorage.setItem('library-user', JSON.stringify(foundUser));
-        setIsLoading(false);
-        return true;
-      }
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      setIsLoading(false);
+      return true;
+    } catch (error) {
+      console.error("Error signing in:", error);
+      setIsLoading(false);
+      return false;
     }
-    
-    setIsLoading(false);
-    return false;
   };
 
   const register = async (data: RegisterData): Promise<boolean> => {
-     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
+    setIsLoading(true);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+      const newUser = userCredential.user;
 
-    const storedRegisteredUsers = localStorage.getItem('library-registered-users');
-    const currentRegisteredUsers = storedRegisteredUsers ? JSON.parse(storedRegisteredUsers) : [];
-    const allUsers = [...mockUsers, ...currentRegisteredUsers];
-    if (allUsers.some(u => u.email === data.email)) {
-        setIsLoading(false);
-        return false;
+      await updateProfile(newUser, { displayName: data.name });
+
+      // ** SPECIAL LOGIC FOR YOUR EMAIL **
+      // If the email is tholkappiyan017@gmail.com, assign both admin and librarian roles.
+      // Otherwise, assign the single role selected in the form.
+      const userRoles: ('student' | 'faculty' | 'librarian' | 'admin')[] = 
+          data.email.toLowerCase() === 'tholkappiyan017@gmail.com'
+          ? ['admin', 'librarian']
+          : [data.role];
+
+      const userProfile: AppUser = {
+        uid: newUser.uid,
+        name: data.name,
+        email: data.email,
+        role: userRoles, // Assign the roles array
+        studentId: data.studentId || '',
+        department: data.department || '',
+        phone: data.phone || '',
+      };
+      
+      await setDoc(doc(db, "users", newUser.uid), userProfile);
+      
+      setIsLoading(false);
+      return true;
+    } catch (error) {
+      console.error("Error registering:", error);
+      setIsLoading(false);
+      return false;
     }
-
-    const newUser: User = { id: Date.now().toString(), ...data };
-    const updatedRegisteredUsers = [...currentRegisteredUsers, newUser];
-
-    const storedCredentials = localStorage.getItem('library-user-credentials');
-    const credentials: StoredCredentials = storedCredentials ? JSON.parse(storedCredentials) : {};
-    const updatedCredentials = { ...credentials, [data.email]: data.password };
-
-    localStorage.setItem('library-registered-users', JSON.stringify(updatedRegisteredUsers));
-    localStorage.setItem('library-user-credentials', JSON.stringify(updatedCredentials));
-    
-    setUser(newUser);
-    localStorage.setItem('library-user', JSON.stringify(newUser));
-    
-    setIsLoading(false);
-    return true;
   };
 
   const sendPasswordResetEmail = async (email: string): Promise<void> => {
-    setIsLoading(true);
-    console.log(`Password reset for ${email}. In a real app, you would send an email with a link like /reset-password?token=some-secret-token`);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setIsLoading(false);
+    try {
+      await firebaseSendPasswordResetEmail(auth, email);
+    } catch (error) {
+      console.error("Error sending password reset email:", error);
+    }
   };
 
-  const resetPassword = async (token: string, newPassword: string): Promise<boolean> => {
-    setIsLoading(true);
-    console.log(`Resetting password with token ${token} to ${newPassword}`);
-    // In a real app, you would verify the token, find the user, and update their password in the database.
-    // For this mock, we'll just assume it's successful.
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setIsLoading(false);
-    return true;
-  };
-
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('library-user');
+  const logout = async () => {
+    await signOut(auth);
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, sendPasswordResetEmail, resetPassword, isLoading }}>
+    <AuthContext.Provider value={{ user, firebaseUser, login, register, logout, sendPasswordResetEmail, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

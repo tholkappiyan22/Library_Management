@@ -1,9 +1,8 @@
-
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
-import { Button } from '@/components/ui/button';
-import { Book, User, LogOut, Home, Search, Users, Settings } from 'lucide-react';
+import { Button } from './ui/button';
+import { Book, User, LogOut, Home, Search, Users } from 'lucide-react';
 
 const Navbar = () => {
   const { user, logout } = useAuth();
@@ -17,17 +16,12 @@ const Navbar = () => {
   const getDashboardLink = () => {
     if (!user) return '/';
     
-    switch (user.role) {
-      case 'admin':
-        return '/admin';
-      case 'librarian':
-        return '/librarian';
-      case 'faculty':
-      case 'student':
-        return '/dashboard';
-      default:
-        return '/';
-    }
+    if (user.role.includes('admin')) return '/admin';
+    if (user.role.includes('librarian')) return '/librarian';
+    if (user.role.includes('faculty')) return '/dashboard';
+    if (user.role.includes('student')) return '/dashboard';
+    
+    return '/';
   };
 
   return (
@@ -54,7 +48,7 @@ const Navbar = () => {
                   <span>Dashboard</span>
                 </Link>
 
-                {(user.role === 'librarian' || user.role === 'admin') && (
+                {(user.role.includes('librarian') || user.role.includes('admin')) && (
                   <Link to="/manage" className="flex items-center space-x-1 text-gray-700 hover:text-blue-600 transition-colors">
                     <Users className="h-4 w-4" />
                     <span>Manage</span>

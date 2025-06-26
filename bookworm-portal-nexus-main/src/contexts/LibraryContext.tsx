@@ -1,9 +1,11 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { mockBooks, type Book } from '@/data/mockBooks';
+import { db } from '@/firebase'; // Import Firestore instance
+import { collection, query, onSnapshot, addDoc, doc, deleteDoc, updateDoc, getDocs, where, writeBatch } from "firebase/firestore";
 import { useAuth } from '@/components/AuthContext';
+import { type Book } from '@/data/mockBooks'; // We'll still use the Book type definition
 
-interface Loan {
+// Define types for Firestore documents
+export interface Loan {
   id: string;
   bookId: string;
   bookTitle: string;
@@ -15,7 +17,7 @@ interface Loan {
   renewals: number;
 }
 
-interface Reservation {
+export interface Reservation {
   id: string;
   bookId: string;
   bookTitle: string;
@@ -30,161 +32,178 @@ interface LibraryContextType {
   books: Book[];
   userLoans: Loan[];
   userReservations: Reservation[];
-  borrowBook: (bookId: string) => boolean;
-  reserveBook: (bookId: string) => boolean;
-  returnBook: (loanId: string) => boolean;
-  renewBook: (loanId: string) => boolean;
+  addBook: (bookData: Omit<Book, 'id'|'availability'|'availableCopies'>) => Promise<void>;
+  deleteBook: (bookId: string) => Promise<void>;
+  borrowBook: (book: Book) => Promise<boolean>;
+  reserveBook: (book: Book) => Promise<boolean>;
+  returnBook: (loanId: string) => Promise<boolean>;
+  renewBook: (loanId: string) => Promise<boolean>;
+  isLoading: boolean;
 }
 
 const LibraryContext = createContext<LibraryContextType | undefined>(undefined);
 
 export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
-  const [books, setBooks] = useState<Book[]>(mockBooks);
+  const [books, setBooks] = useState<Book[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Load data from localStorage on mount
+  // Effect to fetch all library data in real-time from Firestore
   useEffect(() => {
-    const storedBooks = localStorage.getItem('library-books');
-    const storedLoans = localStorage.getItem('library-loans');
-    const storedReservations = localStorage.getItem('library-reservations');
+    setIsLoading(true);
+    
+    // Listener for books collection
+    const booksQuery = query(collection(db, "books"));
+    const unsubscribeBooks = onSnapshot(booksQuery, (querySnapshot) => {
+      const booksData = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Book));
+      setBooks(booksData);
+      setIsLoading(false);
+    });
 
-    if (storedBooks) {
-      setBooks(JSON.parse(storedBooks));
-    }
-    if (storedLoans) {
-      setLoans(JSON.parse(storedLoans));
-    }
-    if (storedReservations) {
-      setReservations(JSON.parse(storedReservations));
-    }
+    // Listener for loans collection
+    const loansQuery = query(collection(db, "loans"));
+    const unsubscribeLoans = onSnapshot(loansQuery, (querySnapshot) => {
+        const loansData = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Loan));
+        setLoans(loansData);
+    });
+
+    // Listener for reservations collection
+    const reservationsQuery = query(collection(db, "reservations"));
+    const unsubscribeReservations = onSnapshot(reservationsQuery, (querySnapshot) => {
+        const reservationsData = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Reservation));
+        setReservations(reservationsData);
+    });
+
+    // Cleanup listeners on unmount
+    return () => {
+      unsubscribeBooks();
+      unsubscribeLoans();
+      unsubscribeReservations();
+    };
   }, []);
 
-  // Save data to localStorage whenever state changes
-  useEffect(() => {
-    localStorage.setItem('library-books', JSON.stringify(books));
-  }, [books]);
-
-  useEffect(() => {
-    localStorage.setItem('library-loans', JSON.stringify(loans));
-  }, [loans]);
-
-  useEffect(() => {
-    localStorage.setItem('library-reservations', JSON.stringify(reservations));
-  }, [reservations]);
-
-  const borrowBook = (bookId: string) => {
-    if (!user) return false;
-    
-    const book = books.find(b => b.id === bookId);
-    if (!book || book.availableCopies <= 0) return false;
-
-    // Create new loan
-    const newLoan: Loan = {
-      id: Date.now().toString(),
-      bookId,
-      bookTitle: book.title,
-      bookAuthor: book.author,
-      userId: user.id,
-      borrowDate: new Date().toISOString(),
-      dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-      status: 'active',
-      renewals: 0
+  // Function to add a new book to the Firestore database
+  const addBook = async (bookData: Omit<Book, 'id'|'availability'|'availableCopies'>) => {
+    const newBookData = {
+      ...bookData,
+      availability: 'available',
+      availableCopies: bookData.totalCopies,
     };
+    await addDoc(collection(db, "books"), newBookData);
+  };
+
+  const deleteBook = async (bookId: string) => {
+    await deleteDoc(doc(db, "books", bookId));
+  };
+  
+  const borrowBook = async (book: Book): Promise<boolean> => {
+    if (!user || book.availableCopies <= 0) return false;
+
+    const bookRef = doc(db, "books", book.id);
+    const newLoanRef = doc(collection(db, "loans")); // Create a new doc reference for the loan
+    
+    const batch = writeBatch(db);
 
     // Update book availability
-    const updatedBooks = books.map(b => 
-      b.id === bookId 
-        ? { 
-            ...b, 
-            availableCopies: b.availableCopies - 1,
-            availability: b.availableCopies - 1 === 0 ? 'checked-out' as const : b.availability
-          }
-        : b
-    );
+    batch.update(bookRef, {
+        availableCopies: book.availableCopies - 1,
+        availability: book.availableCopies - 1 === 0 ? 'checked-out' : 'available'
+    });
 
-    setBooks(updatedBooks);
-    setLoans([...loans, newLoan]);
-    return true;
-  };
-
-  const reserveBook = (bookId: string) => {
-    if (!user) return false;
-    
-    const book = books.find(b => b.id === bookId);
-    if (!book) return false;
-
-    // Check if user already has a reservation for this book
-    const existingReservation = reservations.find(r => r.bookId === bookId && r.userId === user.id);
-    if (existingReservation) return false;
-
-    const newReservation: Reservation = {
-      id: Date.now().toString(),
-      bookId,
-      bookTitle: book.title,
-      bookAuthor: book.author,
-      userId: user.id,
-      reservationDate: new Date().toISOString(),
-      position: reservations.filter(r => r.bookId === bookId).length + 1,
-      estimatedAvailableDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    // Create new loan document
+    const newLoan: Omit<Loan, 'id'> = {
+        bookId: book.id,
+        bookTitle: book.title,
+        bookAuthor: book.author,
+        userId: user.uid,
+        borrowDate: new Date().toISOString(),
+        dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+        status: 'active',
+        renewals: 0
     };
+    batch.set(newLoanRef, newLoan);
 
-    setReservations([...reservations, newReservation]);
+    await batch.commit();
     return true;
   };
 
-  const returnBook = (loanId: string) => {
-    const loan = loans.find(l => l.id === loanId);
-    if (!loan) return false;
+  const reserveBook = async (book: Book): Promise<boolean> => {
+    if (!user) return false;
 
-    // Update book availability
-    const updatedBooks = books.map(b => 
-      b.id === loan.bookId 
-        ? { 
-            ...b, 
-            availableCopies: b.availableCopies + 1,
-            availability: 'available' as const
-          }
-        : b
-    );
+    // Check if user already has a reservation
+    const q = query(collection(db, "reservations"), where("bookId", "==", book.id), where("userId", "==", user.uid));
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+        return false; // User already has a reservation
+    }
 
-    // Remove loan
-    const updatedLoans = loans.filter(l => l.id !== loanId);
+    const newReservation: Omit<Reservation, 'id'|'position'|'estimatedAvailableDate'> = {
+        bookId: book.id,
+        bookTitle: book.title,
+        bookAuthor: book.author,
+        userId: user.uid,
+        reservationDate: new Date().toISOString(),
+    };
+    
+    await addDoc(collection(db, "reservations"), newReservation);
+    
+    // Update book status if it's the first reservation
+    if (book.availability === 'available' && book.availableCopies === 0) {
+        await updateDoc(doc(db, "books", book.id), { availability: 'reserved' });
+    }
 
-    setBooks(updatedBooks);
-    setLoans(updatedLoans);
     return true;
   };
 
-  const renewBook = (loanId: string) => {
-    const updatedLoans = loans.map(loan => 
-      loan.id === loanId 
-        ? { 
-            ...loan, 
-            dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-            renewals: loan.renewals + 1
-          }
-        : loan
-    );
+  const returnBook = async (loanId: string): Promise<boolean> => {
+    const loanDoc = doc(db, "loans", loanId);
+    const loanData = loans.find(l => l.id === loanId);
+    if (!loanData) return false;
 
-    setLoans(updatedLoans);
+    const bookRef = doc(db, "books", loanData.bookId);
+    const bookData = books.find(b => b.id === loanData.bookId);
+    if (!bookData) return false;
+    
+    const batch = writeBatch(db);
+    batch.update(bookRef, {
+        availableCopies: bookData.availableCopies + 1,
+        availability: 'available'
+    });
+    batch.delete(loanDoc);
+    await batch.commit();
     return true;
   };
 
-  // Get user-specific data
-  const userLoans = user ? loans.filter(loan => loan.userId === user.id) : [];
-  const userReservations = user ? reservations.filter(res => res.userId === user.id) : [];
+  const renewBook = async (loanId: string): Promise<boolean> => {
+    const loanRef = doc(db, "loans", loanId);
+    const loanData = loans.find(l => l.id === loanId);
+    if (!loanData || loanData.renewals >= 2) return false; // Example: Max 2 renewals
+
+    await updateDoc(loanRef, {
+        dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+        renewals: loanData.renewals + 1
+    });
+    return true;
+  };
+
+
+  const userLoans = user ? loans.filter(loan => loan.userId === user.uid) : [];
+  const userReservations = user ? reservations.filter(res => res.userId === user.uid) : [];
 
   return (
     <LibraryContext.Provider value={{
       books,
       userLoans,
       userReservations,
+      addBook,
+      deleteBook,
       borrowBook,
       reserveBook,
       returnBook,
-      renewBook
+      renewBook,
+      isLoading
     }}>
       {children}
     </LibraryContext.Provider>

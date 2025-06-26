@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,16 +7,18 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Search, Edit, Trash2, Book } from 'lucide-react';
-import { mockBooks, categories, type Book as BookType } from '@/data/mockBooks';
+import { categories, type Book as BookType } from '@/data/mockBooks';
 import { useToast } from '@/hooks/use-toast';
+import { useLibrary } from '@/contexts/LibraryContext';
 
 const ManageBooks = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All Categories');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const { toast } = useToast();
+  const { books, addBook, deleteBook, isLoading } = useLibrary();
 
-  const [newBook, setNewBook] = useState({
+  const initialNewBookState = {
     title: '',
     author: '',
     isbn: '',
@@ -26,44 +27,56 @@ const ManageBooks = () => {
     totalCopies: 1,
     publishedYear: new Date().getFullYear(),
     pages: 0,
-    description: ''
-  });
-
-  const filteredBooks = mockBooks.filter(book => {
-    const matchesSearch = book.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         book.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         book.isbn.includes(searchTerm);
-    
-    const matchesCategory = selectedCategory === 'All Categories' || book.category === selectedCategory;
-    
-    return matchesSearch && matchesCategory;
-  });
-
-  const handleAddBook = () => {
-    toast({
-      title: "Book Added Successfully",
-      description: `"${newBook.title}" has been added to the catalog.`,
-    });
-    setIsAddDialogOpen(false);
-    setNewBook({
-      title: '',
-      author: '',
-      isbn: '',
-      publisher: '',
-      category: '',
-      totalCopies: 1,
-      publishedYear: new Date().getFullYear(),
-      pages: 0,
-      description: ''
-    });
+    description: '',
+    language: 'English',
+    coverImage: '/placeholder.svg'
   };
 
-  const handleDeleteBook = (book: BookType) => {
-    toast({
-      title: "Book Deleted",
-      description: `"${book.title}" has been removed from the catalog.`,
-      variant: "destructive",
-    });
+  const [newBook, setNewBook] = useState(initialNewBookState);
+
+  const filteredBooks = useMemo(() => {
+      return books.filter(book => {
+        const matchesSearch = book.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                             book.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                             book.isbn.includes(searchTerm);
+        
+        const matchesCategory = selectedCategory === 'All Categories' || book.category === selectedCategory;
+        
+        return matchesSearch && matchesCategory;
+      });
+  }, [books, searchTerm, selectedCategory]);
+
+  const handleAddBook = async () => {
+    if (!newBook.title || !newBook.author || !newBook.isbn || !newBook.category) {
+        toast({ title: "Missing Information", description: "Please fill out all required fields.", variant: "destructive" });
+        return;
+    }
+
+    try {
+        await addBook(newBook);
+        toast({
+            title: "Book Added Successfully",
+            description: `"${newBook.title}" has been added to the catalog.`,
+        });
+        setIsAddDialogOpen(false);
+        setNewBook(initialNewBookState);
+    } catch (error) {
+        console.error("Error adding book:", error);
+        toast({ title: "Error", description: "Could not add the book to the database.", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteBook = async (book: BookType) => {
+    try {
+        await deleteBook(book.id);
+        toast({
+            title: "Book Deleted",
+            description: `"${book.title}" has been removed from the catalog.`,
+        });
+    } catch (error) {
+        console.error("Error deleting book:", error);
+        toast({ title: "Error", description: "Could not delete the book.", variant: "destructive" });
+    }
   };
 
   const getAvailabilityBadge = (book: BookType) => {
@@ -102,7 +115,7 @@ const ManageBooks = () => {
                   Enter the details for the new book you want to add to the catalog.
                 </DialogDescription>
               </DialogHeader>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
                 <div>
                   <Label htmlFor="title">Title</Label>
                   <Input
@@ -193,7 +206,7 @@ const ManageBooks = () => {
                   />
                 </div>
               </div>
-              <div className="flex justify-end space-x-2 mt-6">
+              <div className="flex justify-end space-x-2">
                 <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                   Cancel
                 </Button>
@@ -242,48 +255,51 @@ const ManageBooks = () => {
             <CardDescription>Manage your library's book collection</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {filteredBooks.map((book) => (
-                <div key={book.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <h3 className="font-semibold text-gray-900">{book.title}</h3>
-                        {getAvailabilityBadge(book)}
-                      </div>
-                      <p className="text-gray-600 mb-1">by {book.author}</p>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
-                        <div>
-                          <span className="font-medium">ISBN:</span> {book.isbn}
+            {isLoading ? (
+                <p>Loading books...</p>
+            ) : (
+                <div className="space-y-4">
+                {filteredBooks.map((book) => (
+                    <div key={book.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                    <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-2">
+                            <h3 className="font-semibold text-gray-900">{book.title}</h3>
+                            {getAvailabilityBadge(book)}
                         </div>
-                        <div>
-                          <span className="font-medium">Category:</span> {book.category}
+                        <p className="text-gray-600 mb-1">by {book.author}</p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
+                            <div>
+                            <span className="font-medium">ISBN:</span> {book.isbn}
+                            </div>
+                            <div>
+                            <span className="font-medium">Category:</span> {book.category}
+                            </div>
+                            <div>
+                            <span className="font-medium">Copies:</span> {book.availableCopies}/{book.totalCopies}
+                            </div>
+                            <div>
+                            <span className="font-medium">Year:</span> {book.publishedYear}
+                            </div>
                         </div>
-                        <div>
-                          <span className="font-medium">Copies:</span> {book.availableCopies}/{book.totalCopies}
                         </div>
-                        <div>
-                          <span className="font-medium">Year:</span> {book.publishedYear}
+                        <div className="flex space-x-2 ml-4">
+                        <Button variant="outline" size="sm">
+                            <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                            variant="destructive" 
+                            size="sm" 
+                            onClick={() => handleDeleteBook(book)}
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
                         </div>
-                      </div>
                     </div>
-                    <div className="flex space-x-2 ml-4">
-                      <Button variant="outline" size="sm">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => handleDeleteBook(book)}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
                     </div>
-                  </div>
+                ))}
                 </div>
-              ))}
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>

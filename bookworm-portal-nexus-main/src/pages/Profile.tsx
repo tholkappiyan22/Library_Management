@@ -1,18 +1,18 @@
-
 import React, { useState } from 'react';
-import { useAuth } from '@/components/AuthContext';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
+import { useAuth } from '../components/AuthContext';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Badge } from '../components/ui/badge';
 import { User, Mail, Phone, Building, IdCard, Edit } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '../hooks/use-toast';
 
 const Profile = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
+  
   const [formData, setFormData] = useState({
     name: user?.name || '',
     email: user?.email || '',
@@ -29,18 +29,18 @@ const Profile = () => {
     setIsEditing(false);
   };
 
-  const getRoleBadge = (role: string) => {
+  const renderRoleBadges = (roles: string[]) => {
     const colors = {
       student: 'bg-blue-100 text-blue-800',
       faculty: 'bg-green-100 text-green-800',
       librarian: 'bg-purple-100 text-purple-800',
       admin: 'bg-red-100 text-red-800'
     };
-    return (
-      <Badge className={colors[role as keyof typeof colors] || 'bg-gray-100 text-gray-800'}>
+    return roles.map(role => (
+      <Badge key={role} className={colors[role as keyof typeof colors] || 'bg-gray-100 text-gray-800'}>
         {role.charAt(0).toUpperCase() + role.slice(1)}
       </Badge>
-    );
+    ));
   };
 
   if (!user) {
@@ -60,7 +60,6 @@ const Profile = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Profile Info */}
           <div className="lg:col-span-2">
             <Card>
               <CardHeader>
@@ -98,19 +97,10 @@ const Profile = () => {
 
                   <div>
                     <Label htmlFor="email">Email Address</Label>
-                    {isEditing ? (
-                      <Input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => setFormData({...formData, email: e.target.value})}
-                      />
-                    ) : (
-                      <div className="flex items-center mt-2">
+                    <div className="flex items-center mt-2">
                         <Mail className="h-4 w-4 mr-2 text-gray-400" />
                         <span>{user.email}</span>
-                      </div>
-                    )}
+                    </div>
                   </div>
 
                   <div>
@@ -157,8 +147,8 @@ const Profile = () => {
 
                   <div>
                     <Label>Role</Label>
-                    <div className="mt-2">
-                      {getRoleBadge(user.role)}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {renderRoleBadges(user.role)}
                     </div>
                   </div>
                 </div>
@@ -174,8 +164,6 @@ const Profile = () => {
               </CardContent>
             </Card>
           </div>
-
-          {/* Quick Stats */}
           <div className="space-y-6">
             <Card>
               <CardHeader>
@@ -185,15 +173,15 @@ const Profile = () => {
                 <div className="space-y-4">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Books Borrowed</span>
-                    <span className="font-semibold">12</span>
+                    <span className="font-semibold">0</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Currently Active</span>
-                    <span className="font-semibold">2</span>
+                    <span className="font-semibold">0</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Reservations</span>
-                    <span className="font-semibold">1</span>
+                    <span className="font-semibold">0</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Total Fines</span>
