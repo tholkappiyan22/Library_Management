@@ -7,18 +7,16 @@ import { AuthProvider } from "@/components/AuthContext";
 import { LibraryProvider } from "@/contexts/LibraryContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Navbar from "@/components/Navbar";
-import Home from "./pages/Home";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import Dashboard from "./pages/Dashboard";
-import Catalog from "./pages/Catalog";
-import Profile from "./pages/Profile";
-import Unauthorized from "./pages/Unauthorized";
-import ManageBooks from "./pages/ManageBooks";
-import NotFound from "./pages/NotFound";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-
+import Home from "@/pages/Home";
+import Login from "@/pages/Login";
+import Register from "@/pages/Register";
+import Dashboard from "@/pages/Dashboard";
+import Catalog from "@/pages/Catalog";
+import Profile from "@/pages/Profile";
+import Unauthorized from "@/pages/Unauthorized";
+import ManageBooks from "@/pages/ManageBooks";
+import NotFound from "@/pages/NotFound";
+import ForgotPassword from "@/pages/ForgotPassword";
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -36,7 +34,6 @@ const App = () => (
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
-                <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/catalog" element={<Catalog />} />
                 <Route path="/unauthorized" element={<Unauthorized />} />
                 <Route 
