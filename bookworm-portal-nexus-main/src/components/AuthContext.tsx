@@ -26,12 +26,12 @@ interface AuthContextType {
   register: (data: RegisterData) => Promise<boolean>;
   logout: () => void;
   sendPasswordResetEmail: (email: string) => Promise<void>;
+  resetPassword: (token: string, newPassword: string) => Promise<boolean>;
   isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock users for demonstration
 const mockUsers: User[] = [
   {
     id: '1',
@@ -68,10 +68,10 @@ const mockUsers: User[] = [
   }
 ];
 
-// Store registered user credentials separately
 interface StoredCredentials {
   [email: string]: string; // email -> password mapping
 }
+
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -96,33 +96,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
+    await new Promise(resolve => setTimeout(resolve, 500));
     
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Get fresh registered users from localStorage
     const storedRegisteredUsers = localStorage.getItem('library-registered-users');
     const currentRegisteredUsers = storedRegisteredUsers ? JSON.parse(storedRegisteredUsers) : [];
-    
-    // Get stored credentials
     const storedCredentials = localStorage.getItem('library-user-credentials');
     const credentials: StoredCredentials = storedCredentials ? JSON.parse(storedCredentials) : {};
     
-    // Check both mock users and registered users
     const allUsers = [...mockUsers, ...currentRegisteredUsers];
     const foundUser = allUsers.find(u => u.email === email);
     
     if (foundUser) {
-      // For mock users, use default password
-      if (mockUsers.find(u => u.email === email) && password === 'password123') {
-        setUser(foundUser);
-        localStorage.setItem('library-user', JSON.stringify(foundUser));
-        setIsLoading(false);
-        return true;
-      }
-      
-      // For registered users, check stored credentials
-      if (credentials[email] && credentials[email] === password) {
+      if ((mockUsers.some(u => u.email === email) && password === 'password123') || (credentials[email] === password)) {
         setUser(foundUser);
         localStorage.setItem('library-user', JSON.stringify(foundUser));
         setIsLoading(false);
@@ -135,47 +120,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const register = async (data: RegisterData): Promise<boolean> => {
-    setIsLoading(true);
-    
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Get current data from localStorage
+     setIsLoading(true);
+    await new Promise(resolve => setTimeout(resolve, 500));
+
     const storedRegisteredUsers = localStorage.getItem('library-registered-users');
-    const storedCredentials = localStorage.getItem('library-user-credentials');
-    
     const currentRegisteredUsers = storedRegisteredUsers ? JSON.parse(storedRegisteredUsers) : [];
-    const credentials: StoredCredentials = storedCredentials ? JSON.parse(storedCredentials) : {};
-    
-    // Check if user already exists
     const allUsers = [...mockUsers, ...currentRegisteredUsers];
-    const existingUser = allUsers.find(u => u.email === data.email);
-    
-    if (existingUser) {
-      setIsLoading(false);
-      return false;
+    if (allUsers.some(u => u.email === data.email)) {
+        setIsLoading(false);
+        return false;
     }
-    
-    // Create new user
-    const newUser: User = {
-      id: Date.now().toString(),
-      name: data.name,
-      email: data.email,
-      role: data.role,
-      studentId: data.studentId,
-      department: data.department,
-      phone: data.phone
-    };
-    
+
+    const newUser: User = { id: Date.now().toString(), ...data };
     const updatedRegisteredUsers = [...currentRegisteredUsers, newUser];
+
+    const storedCredentials = localStorage.getItem('library-user-credentials');
+    const credentials: StoredCredentials = storedCredentials ? JSON.parse(storedCredentials) : {};
     const updatedCredentials = { ...credentials, [data.email]: data.password };
-    
-    // Store both user data and credentials
-    setRegisteredUsers(updatedRegisteredUsers);
+
     localStorage.setItem('library-registered-users', JSON.stringify(updatedRegisteredUsers));
     localStorage.setItem('library-user-credentials', JSON.stringify(updatedCredentials));
     
-    // Auto login after registration
     setUser(newUser);
     localStorage.setItem('library-user', JSON.stringify(newUser));
     
@@ -185,10 +150,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const sendPasswordResetEmail = async (email: string): Promise<void> => {
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    console.log(`Password reset email sent to ${email}`);
+    console.log(`Password reset for ${email}. In a real app, you would send an email with a link like /reset-password?token=some-secret-token`);
+    await new Promise(resolve => setTimeout(resolve, 500));
     setIsLoading(false);
-  }
+  };
+
+  const resetPassword = async (token: string, newPassword: string): Promise<boolean> => {
+    setIsLoading(true);
+    console.log(`Resetting password with token ${token} to ${newPassword}`);
+    // In a real app, you would verify the token, find the user, and update their password in the database.
+    // For this mock, we'll just assume it's successful.
+    await new Promise(resolve => setTimeout(resolve, 500));
+    setIsLoading(false);
+    return true;
+  };
 
   const logout = () => {
     setUser(null);
@@ -196,7 +171,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isLoading, sendPasswordResetEmail }}>
+    <AuthContext.Provider value={{ user, login, register, logout, sendPasswordResetEmail, resetPassword, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
