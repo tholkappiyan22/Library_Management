@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React,{ useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/components/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -92,6 +91,15 @@ const Login = () => {
                 </div>
               </div>
 
+              <div className="text-sm text-right">
+                <Link
+                  to="/forgot-password"
+                  className="font-medium text-blue-600 hover:underline"
+                >
+                  Forgot Password?
+                </Link>
+              </div>
+
               <Button 
                 type="submit" 
                 className="w-full bg-blue-600 hover:bg-blue-700"
@@ -135,4 +143,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default Login

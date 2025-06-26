@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface User {
@@ -26,6 +25,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<boolean>;
   register: (data: RegisterData) => Promise<boolean>;
   logout: () => void;
+  sendPasswordResetEmail: (email: string) => Promise<void>;
   isLoading: boolean;
 }
 
@@ -183,13 +183,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return true;
   };
 
+  const sendPasswordResetEmail = async (email: string): Promise<void> => {
+    setIsLoading(true);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    console.log(`Password reset email sent to ${email}`);
+    setIsLoading(false);
+  }
+
   const logout = () => {
     setUser(null);
     localStorage.removeItem('library-user');
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, isLoading, sendPasswordResetEmail }}>
       {children}
     </AuthContext.Provider>
   );
