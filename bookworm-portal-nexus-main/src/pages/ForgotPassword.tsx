@@ -10,7 +10,7 @@ import { useAuth } from '@/components/AuthContext';
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState('');
-  const { sendPasswordResetEmail } = useAuth();
+  const { sendPasswordResetEmail, isLoading } = useAuth();
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -58,8 +58,9 @@ const ForgotPassword = () => {
               <Button
                 type="submit"
                 className="w-full bg-blue-600 hover:bg-blue-700"
+                disabled={isLoading}
               >
-                Send Reset Link
+                {isLoading ? 'Sending...' : 'Send Reset Link'}
               </Button>
             </form>
 
