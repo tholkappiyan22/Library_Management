@@ -1,11 +1,11 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// Using a different import style to troubleshoot a potential environment issue
+import * as firestore from "firebase/firestore";
+
 const firebaseConfig = {
   apiKey: "AIzaSyBylzmxBL2wEp7PtgcvTHyvDRmfALgZ8aE",
   authDomain: "bookworm-portal-nexus-main.firebaseapp.com",
@@ -15,7 +15,14 @@ const firebaseConfig = {
   appId: "1:885399956976:web:a46cc5303fcc7f7800c135",
   measurementId: "G-8E694MGPJH"
 };
-
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+
+// Initialize Firebase Authentication and get a reference to the service
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+// Initialize Cloud Firestore and get a reference to the service
+// export const db = firestore.getFirestore(app);
+
+
+export default app;
